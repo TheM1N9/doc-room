@@ -7,13 +7,13 @@ from discord.ext import commands
 
 # from langchain_core.messages import AIMessage, HumanMessage
 
-import memory as memory
-from memory import (
+from discord_bot.memory import (
     active_users,
     add_to_chat_history,
     chat_history,
     set_user_active,
     set_user_inactive,
+    bot_id,
     # memory,
 )
 
@@ -25,7 +25,7 @@ from memory import (
 #     VECTORDB_PORT,
 #     VECTORDB_HOST,
 # )
-from state import BotState, empty_active_users, new_user, user_exists
+from discord_bot.state import BotState, empty_active_users, new_user, user_exists
 
 # from expert_system.conversation import Chatbot
 # from nlqs.database.postgres import PostgresConnectionConfig
@@ -94,7 +94,7 @@ def create_bot() -> commands.Bot:
         print(f"Bot ID: {bot.user.id}")
 
         # Save the bot's ID
-        memory.bot_id = bot.user.id
+        bot_id = bot.user.id
 
         global_state = BotState.IDLE  # Initial State - Idle
 
