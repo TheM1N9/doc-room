@@ -1,6 +1,6 @@
 from enum import Enum
 
-from memory import active_users
+from discord_bot.memory import active_users
 
 
 class BotState(Enum):
