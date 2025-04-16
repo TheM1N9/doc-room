@@ -6,6 +6,9 @@ bot_id: str = "Replace"  # Bot ID
 
 CHAT_HISTORY_LIMIT = 100
 
+# Dictionary to store user personal data
+user_data = {}
+
 
 def get_user_chat_history(user_id: str) -> List[str]:
     """Get the chat history of a user
@@ -49,3 +52,37 @@ def set_user_inactive(user_id: str) -> None:
     """
     if user_id in active_users:
         active_users.remove(user_id)
+
+
+def get_user_data(user_id: int) -> dict:
+    """Get user's personal data.
+
+    Args:
+        user_id: Discord user ID
+
+    Returns:
+        Dictionary containing user's personal data
+    """
+    return user_data.get(user_id, {})
+
+
+def update_user_data(user_id: int, data: dict) -> None:
+    """Update user's personal data.
+
+    Args:
+        user_id: Discord user ID
+        data: Dictionary containing updated user data
+    """
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    user_data[user_id].update(data)
+
+
+def clear_user_data(user_id: int) -> None:
+    """Clear user's personal data.
+
+    Args:
+        user_id: Discord user ID
+    """
+    if user_id in user_data:
+        del user_data[user_id]

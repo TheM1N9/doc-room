@@ -4,9 +4,9 @@ import re
 from typing import List, Tuple, Union
 import discord
 from discord.ext import commands
+from chatbot.chat import personal_parser, update_personal_details
 
 # from langchain_core.messages import AIMessage, HumanMessage
-
 from discord_bot.memory import (
     active_users,
     add_to_chat_history,
@@ -14,7 +14,9 @@ from discord_bot.memory import (
     set_user_active,
     set_user_inactive,
     bot_id,
-    # memory,
+    get_user_data,
+    update_user_data,
+    clear_user_data,
 )
 
 # from discord_bot.parameters import (
@@ -36,38 +38,7 @@ from discord_bot.state import BotState, empty_active_users, new_user, user_exist
 global_state = BotState.IDLE
 
 
-# ChromaDB configuration
-# chroma_config = ChromaDBConfig(
-#     collection_name=CHROMA_COLLECTION_NAME, persist_path=Path("../chroma")
-# )
-
-# remote config
-# chroma_config = ChromaDBConfig(
-#     collection_name=CHROMA_COLLECTION_NAME, is_local=False, host=VECTORDB_HOST, port=int(VECTORDB_PORT)
-# )
-
-
-# SQLite configuration
-# sqlite_config = SQLiteConnectionConfig(
-#     db_file=Path(SQLITE_DB_FILE),
-#     dataset_table_name=SQL_TABLE_NAME,
-#     uri_column="URL",
-#     output_columns=OUTPUT_COLUMNS,
-# )
-
-
-# postgres_config = PostgresConnectionConfig(
-#     host="aws-0-us-east-1.pooler.supabase.com",
-#     port=6543,
-#     user="postgres.xdvwtpqclkedpktjsrzc",
-#     password="aOoDlcdghQ39Gkjr",
-#     database_name="postgres",
-#     dataset_table_name="new_dataset",
-#     uri_column="URL",
-# )
-
-
-def create_bot() -> commands.Bot:
+def create_bot(openai_client) -> commands.Bot:
     """Create a Discord Bot
 
     Returns:
@@ -76,7 +47,6 @@ def create_bot() -> commands.Bot:
     global global_state
 
     bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
-    # chatbot_instance = Chatbot.instance()
 
     # Create the default bot behaviors here
 
@@ -114,7 +84,7 @@ def create_bot() -> commands.Bot:
         # Tracks the last 100 messages in chat_history
         add_to_chat_history(user_id, user_input)
 
-        print(chat_history)
+        print(f"chat history: {chat_history}")
         print(active_users)
 
         # To prevent bot from replying to it's own message
@@ -141,10 +111,17 @@ def create_bot() -> commands.Bot:
                 else:  # Any other prompt
                     global_state = user_exists()  # Sets the bot state to Engaged
             else:
+                # stopping the bot to only ask the users their personal details and adds the user to the active users.
+                reply = (
+                    f"<@{user_id}> "
+                    + "Give us your personal details. Eg: I'm Mani, 21 Male. i'm currently working as a developer at Aegion."
+                )
+                await message.channel.send(reply)
                 set_user_active(
                     user_id
                 )  # Adding the user to the current going-on conversations
                 global_state = new_user()  # Sets the bot state to Engaged
+                return
 
         # To Check the state of the bot
         if (
@@ -155,30 +132,29 @@ def create_bot() -> commands.Bot:
                 # Set the typing state on the channel
                 await message.channel.typing()
 
-                # nlqs_instance = NLQS(sqlite_config, chroma_config)
-                # queried_data = nlqs_instance.execute_nlqs_workflow(
-                #     user_input, chat_history
-                # )
+                corrected_chat_history = change_chat_history(chat_history)
+                # print(f"corrected_chat_history: {corrected_chat_history}")
 
-                # if queried_data is None:
-                #     print("ERROR - Summarization failed")
-                #     queried_data = NLQSResult(records=[], uris=[])
+                # Get existing user data
+                previous_data = get_user_data(user_id)
 
-                # corrected_chat_history = change_chat_history(chat_history)
+                if not previous_data:
+                    # First time user - use personal_parser
+                    data, reply = personal_parser(openai_client, user_input)
+                    if data:
+                        update_user_data(user_id, data)
+                else:
+                    # Update existing data
+                    data, reply = update_personal_details(
+                        openai_client, user_input, previous_data, chat_history
+                    )
+                    if data:
+                        update_user_data(user_id, data)
 
-                # updated_user_input = (
-                #     f"user input: {user_input} Relevant data: {queried_data}"
-                # )
-                # updated_user_input = re.sub(r"{|}", "", updated_user_input)
+                chat_history.append((user_input, reply))
+                reply = f"<@{user_id}> " + reply
 
-                # reply = chatbot_instance.converse(
-                #     user_input=updated_user_input,
-                #     previous_messages=corrected_chat_history,
-                # )
-                # chat_history.append((user_input, reply[0]))
-                # reply = f"<@{user_id}> " + reply[0]
-
-                reply = f"<@{user_id}> " + "Give us your personal details."
+                # reply = f"processing.........."
 
                 await message.channel.send(reply)
         # To process the commands
@@ -225,29 +201,29 @@ def create_bot() -> commands.Bot:
     return bot
 
 
-# def change_chat_history(
-#     user_chat_history: List[Tuple[str, str]],
-# ) -> List[Union[HumanMessage, AIMessage]]:
-#     """Converts a list of tuples representing chat history to a list of HumanMessage and AIMessage objects.
+def change_chat_history(
+    user_chat_history: List[Tuple[str, str]],
+) -> List[str]:
+    """Converts a list of tuples representing chat history to a list of HumanMessage and AIMessage objects.
 
-#     Args:
-#         user_chat_history (List[Tuple[str, str]]): A list of tuples where each tuple represents a message in the chat history.
-#                                                     The first element of the tuple is the sender (either "Human" or "AI")
-#                                                     and the second element is the message content.
+    Args:
+        user_chat_history (List[Tuple[str, str]]): A list of tuples where each tuple represents a message in the chat history.
+                                                    The first element of the tuple is the sender (either "Human" or "AI")
+                                                    and the second element is the message content.
 
-#     Returns:
-#         List[Union[HumanMessage, AIMessage]]: A list of HumanMessage and AIMessage objects representing the chat history.
-#     """
-#     corrected_chat_history = []
-#     for sender, message in user_chat_history:
-#         if sender is memory.bot_id:
-#             # Remove user IDs from the message
-#             message = remove_user_id(message)
-#             corrected_chat_history.append(AIMessage(content=message))
-#         else:
-#             corrected_chat_history.append(HumanMessage(content=message))
+    Returns:
+        List[Union[HumanMessage, AIMessage]]: A list of HumanMessage and AIMessage objects representing the chat history.
+    """
+    corrected_chat_history = []
+    for sender, message in user_chat_history:
+        if sender is bot_id:
+            # Remove user IDs from the message
+            message = remove_user_id(message)
+            corrected_chat_history.append(message)
+        else:
+            corrected_chat_history.append(message)
 
-#     return corrected_chat_history
+    return corrected_chat_history
 
 
 def remove_user_id(input_string: str) -> str:
