@@ -140,22 +140,27 @@ def create_bot(openai_client) -> commands.Bot:
                 # Get existing user data
                 previous_data = get_user_data(user_id)
                 medical_data = get_medical_data(user_id)
+                print(f"Medical data: {medical_data}")
 
                 if not previous_data:
                     # First time user - use personal_parser
                     data, reply = personal_parser(openai_client, user_input)
                     if data:
                         update_user_data(user_id, data)
-                elif not medical_data.get("diagnose_complete"):
-                    # Handle medical diagnosis
+                elif not medical_data.get("diagnose_complete") or not medical_data.get(
+                    "diagnosed_with"
+                ):
+                    # Handle medical diagnosis if diagnosis is not complete or no diagnosis provided
                     data, reply = check_diagnosis(
                         openai_client, user_input, chat_history, previous_data
                     )
                     if data:
                         update_medical_data(user_id, data)
                 else:
-                    # If we have complete personal data, directly handle the user's message
-                    reply = "I understand your message. How can I help you further?"
+                    # Only proceed to general conversation if we have both complete personal data and a diagnosis
+                    reply = (
+                        "I understand your symptoms. Doctor will get back to you soon!!"
+                    )
 
                 chat_history.append((user_input, reply))
                 reply = f"<@{user_id}> " + reply

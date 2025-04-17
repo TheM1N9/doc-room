@@ -71,13 +71,11 @@ def personal_parser(client, user_message: str) -> Tuple[Dict[str, str], str]:
             elif missing_fields:
                 reply = f"Please provide your {' and '.join(missing_fields)}."
             else:
-                reply = (
-                    "Thank you for providing your details! How can I help you today?"
-                )
+                reply = "Thank you for providing all your personal details! Now, Provide me all the current symptoms your are facing."
             return data, reply
         except json.JSONDecodeError as e:
             return {}, f"Error: {e}"
-    return {}, "I don't know this error, check for yourself."
+    return {}, response
 
 
 def update_personal_details(
@@ -142,7 +140,7 @@ def update_personal_details(
             if missing_fields:
                 reply = f"Please provide your {' and '.join(missing_fields)}."
             else:
-                reply = "Thank you for providing all your details! How can I help you today? Provide me all the current problems and issues your are facing."
+                reply = "Thank you for providing all your personal details! Now, Provide me all the current symptoms your are facing."
 
             return updated_data, reply
     except (json.JSONDecodeError, AttributeError) as e:
