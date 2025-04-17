@@ -4,7 +4,7 @@ import re
 from typing import List, Tuple, Union
 import discord
 from discord.ext import commands
-from chatbot.chat import personal_parser, update_personal_details
+from chatbot.chat import personal_parser, update_personal_details, check_diagnosis
 
 # from langchain_core.messages import AIMessage, HumanMessage
 from discord_bot.memory import (
@@ -17,6 +17,9 @@ from discord_bot.memory import (
     get_user_data,
     update_user_data,
     clear_user_data,
+    get_medical_data,
+    update_medical_data,
+    clear_medical_data,
 )
 
 # from discord_bot.parameters import (
@@ -133,23 +136,26 @@ def create_bot(openai_client) -> commands.Bot:
                 await message.channel.typing()
 
                 corrected_chat_history = change_chat_history(chat_history)
-                # print(f"corrected_chat_history: {corrected_chat_history}")
 
                 # Get existing user data
                 previous_data = get_user_data(user_id)
+                medical_data = get_medical_data(user_id)
 
                 if not previous_data:
                     # First time user - use personal_parser
                     data, reply = personal_parser(openai_client, user_input)
                     if data:
                         update_user_data(user_id, data)
-                else:
-                    # Update existing data
-                    data, reply = update_personal_details(
-                        openai_client, user_input, previous_data, chat_history
+                elif not medical_data.get("diagnose_complete"):
+                    # Handle medical diagnosis
+                    data, reply = check_diagnosis(
+                        openai_client, user_input, chat_history, previous_data
                     )
                     if data:
-                        update_user_data(user_id, data)
+                        update_medical_data(user_id, data)
+                else:
+                    # If we have complete personal data, directly handle the user's message
+                    reply = "I understand your message. How can I help you further?"
 
                 chat_history.append((user_input, reply))
                 reply = f"<@{user_id}> " + reply

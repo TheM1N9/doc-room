@@ -124,6 +124,8 @@ def update_personal_details(
         .message.content
     )
 
+    print("update personal response: {response}")
+
     try:
         # Extract JSON from response
         match = re.search(r"```json(.*?)```", response, re.DOTALL)
@@ -140,10 +142,136 @@ def update_personal_details(
             if missing_fields:
                 reply = f"Please provide your {' and '.join(missing_fields)}."
             else:
-                reply = "Thank you for providing all your details! How can I help you today?"
+                reply = "Thank you for providing all your details! How can I help you today? Provide me all the current problems and issues your are facing."
 
             return updated_data, reply
     except (json.JSONDecodeError, AttributeError) as e:
         return previous_data, f"Error parsing response: {str(e)}"
 
     return previous_data, "I couldn't understand your response. Please try again."
+
+
+def check_diagnosis(
+    client,
+    user_message: str,
+    chat_history: List[Tuple[str, str]],
+    user_data: Dict[str, str],
+) -> Tuple[Dict[str, str], str]:
+    """Check and diagnose medical symptoms based on user's input.
+
+    Args:
+        client: OpenAI client
+        user_message: User's message about their symptoms
+        chat_history: List of previous conversation messages
+        user_data: User's personal information
+
+    Returns:
+        Tuple containing diagnosis data and response message
+    """
+    context = "\n".join([f"{role}: {msg}" for role, msg in chat_history])
+
+    response = (
+        client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"""You are a helpful Medical assistant. Your task is to analyze the user's answers and diagnose what disease or issue the user is facing.
+                    Patient Information: {json.dumps(user_data)}
+                    Chat history: {context}
+                    
+                    Return a JSON response with fields:
+                    1. diagnose_complete (yes/no)
+                    2. symptoms (list of identified symptoms)
+                    3. diagnosed_with (diagnosis if complete, empty if not)
+                    4. next_question (question to ask if diagnosis is not complete)
+                    """,
+                },
+                {
+                    "role": "user",
+                    "content": user_message,
+                },
+            ],
+        )
+        .choices[0]
+        .message.content
+    )
+
+    try:
+        match = re.search(r"```json(.*?)```", response, re.DOTALL)
+        if match:
+            medical_data = json.loads(match.group(1))
+
+            if medical_data.get("diagnose_complete", "").lower() == "no":
+                return medical_data, medical_data.get(
+                    "next_question",
+                    "Could you please describe your symptoms in more detail?",
+                )
+            else:
+                return (
+                    medical_data,
+                    f"Based on your symptoms, you may be experiencing: {medical_data.get('diagnosed_with', '')}. Would you like to know more about this condition?",
+                )
+    except (json.JSONDecodeError, AttributeError) as e:
+        return {}, f"Error parsing response: {str(e)}"
+
+    return (
+        {},
+        "I couldn't understand your symptoms. Could you please describe them again?",
+    )
+
+
+# def generate_differential_diagnosis() -> Tuple[List[str], str]:
+#     """Generate a differential diagnosis based on symptoms
+
+#     Returns:
+#         Tuple[List[str], str]: List of possible diagnoses and a summary
+#     """
+#     prompt = f"""
+#     Based on the following patient information and symptoms, provide a detailed medical analysis:
+
+#     Patient Information:
+#     {patient_info}
+
+#     Symptoms and History:
+#     {', '.join(symptoms)}
+
+#     Please provide a professional medical analysis including:
+#     1. Differential diagnosis in order of likelihood
+#     2. Supporting evidence for each potential diagnosis
+#     3. Recommended diagnostic tests
+#     4. Initial treatment recommendations
+#     5. Red flags or concerning features
+#     6. Follow-up recommendations
+#     """
+
+#     response = openai_client.chat.completions.create(
+#         model="gpt-4o",  # or your specific deployment name
+#         messages=[
+#             {
+#                 "role": "system",
+#                 "content": "You are a medical expert providing detailed differential diagnoses for doctors.",
+#             },
+#             {"role": "user", "content": prompt},
+#         ],
+#         temperature=0.7,
+#         max_tokens=2000,
+#     )
+
+#     diagnosis_text = response.choices[0].message.content
+#     if not diagnosis_text:
+#         raise Exception(
+#             "OpenAI has an issue, check by your self, I'm writing this on high!!"
+#         )
+#     diagnoses = diagnosis_text.split("\n\n")
+
+#     # Store the diagnosis in history
+#     diagnosis_history.append(
+#         {
+#             "symptoms": symptoms.copy(),
+#             "patient_info": patient_info.copy(),
+#             "diagnosis": diagnosis_text,
+#         }
+#     )
+
+#     return diagnoses, diagnosis_text
